@@ -1150,7 +1150,7 @@ function EntryView({
   );
 }
 
-type ExitLine = { key: string; itemId: number | null; quantity: string };
+type ExitLine = { key: string; itemId: number; quantity: number };
 
 function ExitView({
   client,
@@ -1163,130 +1163,231 @@ function ExitView({
   customers: Customer[];
   runAction: ActionRunner;
 }) {
-  const [lines, setLines] = useState<ExitLine[]>([
-    { key: crypto.randomUUID(), itemId: null, quantity: "" },
-  ]);
-  function updateLine(key: string, patch: Partial<ExitLine>) {
+  const [lines, setLines] = useState<ExitLine[]>([]);
+  const [draftItemId, setDraftItemId] = useState<number | null>(null);
+  const [draftQuantity, setDraftQuantity] = useState("1");
+  const draftItem = items.find((item) => item.id === draftItemId) ?? null;
+  const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
+
+  function addDraftLine() {
+    if (!draftItemId) {
+      alert("Selecciona un item para agregar a la salida.");
+      return;
+    }
+
+    const quantity = Number(draftQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      alert("Ingresa una cantidad valida mayor a cero.");
+      return;
+    }
+
+    setLines((current) => {
+      const existing = current.find((line) => line.itemId === draftItemId);
+      if (existing) {
+        return current.map((line) =>
+          line.itemId === draftItemId
+            ? { ...line, quantity: line.quantity + quantity }
+            : line,
+        );
+      }
+      return [
+        ...current,
+        { key: crypto.randomUUID(), itemId: draftItemId, quantity },
+      ];
+    });
+    setDraftItemId(null);
+    setDraftQuantity("1");
+  }
+
+  function updateLineQuantity(key: string, quantity: string) {
+    const parsed = Number(quantity);
     setLines((current) =>
-      current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+      current.map((line) =>
+        line.key === key
+          ? { ...line, quantity: Number.isFinite(parsed) ? parsed : 0 }
+          : line,
+      ),
     );
   }
+
   return (
     <OperationPanel
       title="Salida rapida"
       subtitle="Descuenta una o varias piezas y genera numero SAL"
       accent="red"
     >
-      <QrScanner
-        items={items}
-        onItem={(item) =>
-          setLines((current) => [
-            { key: crypto.randomUUID(), itemId: item.id, quantity: "1" },
-            ...current,
-          ])
-        }
-      />
-      <form
-        onSubmit={(event) =>
-          submitForm(event, (form) => {
-            const payloadLines = lines
-              .map((line) => ({
-                itemId: line.itemId ?? 0,
-                quantity: Number(line.quantity),
-              }))
-              .filter((line) => line.itemId > 0 && line.quantity > 0);
-            if (!payloadLines.length)
-              throw new Error("Agrega al menos una linea valida.");
-            return runAction("Salida registrada", () =>
-              createStockExit(client, {
-                customerId: nullableInput(form, "customerId"),
-                customerName: textInput(form, "customerName"),
-                workDescription: textInput(form, "workDescription"),
-                workOrderNumber: textInput(form, "workOrderNumber"),
-                notes: textInput(form, "notes"),
-                lines: payloadLines,
-              }),
-            );
-          })
-        }
-      >
-        <label>
-          {" "}
-          Cliente guardado{" "}
-          <select name="customerId" defaultValue="">
-            <option value="">Sin cliente</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>{" "}
-        </label>
-        <label>
-          {" "}
-          Cliente rapido{" "}
-          <input
-            name="customerName"
-            placeholder="Nombre si no esta cargado"
-          />{" "}
-        </label>
-        <div className="line-editor">
-          {lines.map((line) => (
-            <div className="line-row" key={line.key}>
-              <ItemSelect
-                items={items}
-                value={line.itemId}
-                onChange={(value) => updateLine(line.key, { itemId: value })}
-              />
+      <div className="exit-builder">
+        <section className="exit-step">
+          <div>
+            <p className="eyebrow">Paso 1</p>
+            <h3>Agregar items y cantidades</h3>
+          </div>
+          <QrScanner
+            items={items}
+            onItem={(item) => {
+              setDraftItemId(item.id);
+              setDraftQuantity("1");
+            }}
+          />
+          <div className="exit-add-row">
+            <ItemSelect
+              items={items}
+              value={draftItemId}
+              onChange={setDraftItemId}
+            />
+            <label>
+              Cantidad
               <input
-                value={line.quantity}
-                onChange={(event) =>
-                  updateLine(line.key, { quantity: event.target.value })
-                }
+                value={draftQuantity}
+                onChange={(event) => setDraftQuantity(event.target.value)}
                 type="number"
                 step="0.001"
                 min="0"
                 placeholder="Cant."
               />
-              <button
-                type="button"
-                onClick={() =>
-                  setLines((current) =>
-                    current.filter((row) => row.key !== line.key),
-                  )
-                }
-              >
-                Quitar
-              </button>
+            </label>
+            <button type="button" className="primary" onClick={addDraftLine}>
+              Agregar
+            </button>
+          </div>
+          {draftItem && <ItemStrip item={draftItem} />}
+        </section>
+
+        <section className="exit-step">
+          <div className="exit-step-header">
+            <div>
+              <p className="eyebrow">Paso 2</p>
+              <h3>Revisar salida</h3>
             </div>
-          ))}
-          <button
-            type="button"
-            className="ghost"
-            onClick={() =>
-              setLines((current) => [
-                ...current,
-                { key: crypto.randomUUID(), itemId: null, quantity: "" },
-              ])
-            }
-          >
-            Agregar linea
+            <strong>
+              {lines.length} items · {formatNumber(totalQuantity)} unidades
+            </strong>
+          </div>
+          {!lines.length && (
+            <EmptyState title="Todavia no agregaste items a la salida" />
+          )}
+          {!!lines.length && (
+            <div className="exit-lines">
+              {lines.map((line) => {
+                const item = items.find(
+                  (candidate) => candidate.id === line.itemId,
+                );
+                if (!item) return null;
+                const nextStock = item.currentStock - line.quantity;
+                return (
+                  <article className="exit-line" key={line.key}>
+                    <div>
+                      <p className="code">{item.code}</p>
+                      <strong>{item.name}</strong>
+                      <span>
+                        Stock actual {formatNumber(item.currentStock)} {item.unitSymbol} · queda {formatNumber(nextStock)} {item.unitSymbol}
+                      </span>
+                    </div>
+                    <label>
+                      Cantidad
+                      <input
+                        value={line.quantity}
+                        onChange={(event) =>
+                          updateLineQuantity(line.key, event.target.value)
+                        }
+                        type="number"
+                        step="0.001"
+                        min="0"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() =>
+                        setLines((current) =>
+                          current.filter((row) => row.key !== line.key),
+                        )
+                      }
+                    >
+                      Quitar
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <form
+          className="exit-step exit-confirm"
+          onSubmit={(event) =>
+            submitForm(event, (form) => {
+              const payloadLines = lines
+                .map((line) => ({
+                  itemId: line.itemId,
+                  quantity: line.quantity,
+                }))
+                .filter((line) => line.itemId > 0 && line.quantity > 0);
+              if (!payloadLines.length)
+                throw new Error("Agrega al menos una linea valida.");
+
+              const confirmed = window.confirm(
+                `Confirmar salida de ${payloadLines.length} items por ${formatNumber(totalQuantity)} unidades?`,
+              );
+              if (!confirmed) return Promise.resolve(false);
+
+              return runAction("Salida registrada", async () => {
+                await createStockExit(client, {
+                  customerId: nullableInput(form, "customerId"),
+                  customerName: textInput(form, "customerName"),
+                  workDescription: textInput(form, "workDescription"),
+                  workOrderNumber: textInput(form, "workOrderNumber"),
+                  notes: textInput(form, "notes"),
+                  lines: payloadLines,
+                });
+                setLines([]);
+                setDraftItemId(null);
+                setDraftQuantity("1");
+              });
+            })
+          }
+        >
+          <div className="exit-step-header">
+            <div>
+              <p className="eyebrow">Paso 3</p>
+              <h3>Cliente y confirmacion</h3>
+            </div>
+            <strong>
+              {lines.length ? "Lista para confirmar" : "Agrega items primero"}
+            </strong>
+          </div>
+          <label>
+            Cliente guardado
+            <select name="customerId" defaultValue="">
+              <option value="">Sin cliente</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Cliente rapido
+            <input
+              name="customerName"
+              placeholder="Nombre si no esta cargado"
+            />
+          </label>
+          <label>
+            Trabajo <input name="workDescription" />
+          </label>
+          <label>
+            Orden <input name="workOrderNumber" />
+          </label>
+          <label>
+            Notas <textarea name="notes" rows={3} />
+          </label>
+          <button className="primary danger" disabled={!lines.length}>
+            Confirmar salida
           </button>
-        </div>
-        <label>
-          {" "}
-          Trabajo <input name="workDescription" />{" "}
-        </label>
-        <label>
-          {" "}
-          Orden <input name="workOrderNumber" />{" "}
-        </label>
-        <label>
-          {" "}
-          Notas <textarea name="notes" rows={3} />{" "}
-        </label>
-        <button className="primary danger">Guardar salida</button>
-      </form>
+        </form>
+      </div>
     </OperationPanel>
   );
 }
@@ -2486,14 +2587,16 @@ function Modal({
 
 function submitForm(
   event: FormEvent<HTMLFormElement>,
-  action: (form: FormData) => Promise<void>,
+  action: (form: FormData) => Promise<void | false>,
 ) {
   event.preventDefault();
   const formElement = event.currentTarget;
   const form = new FormData(formElement);
   try {
     void action(form)
-      .then(() => formElement.reset())
+      .then((result) => {
+        if (result !== false) formElement.reset();
+      })
       .catch((err) => alert(errorMessage(err)));
   } catch (err) {
     alert(errorMessage(err));
