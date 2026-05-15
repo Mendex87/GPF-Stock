@@ -673,20 +673,56 @@ function LabelsView({ items }: { items: Item[] }) {
   async function generatePdf() {
     const chosen = items.filter((item) => selected.includes(item.id));
     if (!chosen.length) throw new Error('Selecciona al menos un item.');
+
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const margin = 8;
+    const labelWidth = 70;
+    const labelHeight = 38;
+    const gap = 4;
+    const columns = 2;
+    const rows = 6;
+    const labelsPerPage = columns * rows;
+    const qrSize = 26;
+
     for (let index = 0; index < chosen.length; index += 1) {
-      if (index > 0 && index % 8 === 0) doc.addPage();
+      if (index > 0 && index % labelsPerPage === 0) doc.addPage();
+
       const item = chosen[index];
-      const x = index % 2 === 0 ? 14 : 110;
-      const y = 14 + (index % 8 >= 2 ? Math.floor((index % 8) / 2) * 68 : 0);
-      const qr = await QRCode.toDataURL(`GPF:ITEM:${item.code}`, { margin: 1, width: 180 });
-      doc.roundedRect(x, y, 82, 56, 4, 4);
-      doc.addImage(qr, 'PNG', x + 4, y + 8, 36, 36);
-      doc.setFontSize(14);
-      doc.text(item.code, x + 44, y + 18);
-      doc.setFontSize(9);
-      doc.text(item.name.slice(0, 30), x + 44, y + 28);
-      doc.text(item.categoryName, x + 44, y + 37);
+      const pageIndex = index % labelsPerPage;
+      const column = pageIndex % columns;
+      const row = Math.floor(pageIndex / columns);
+      const x = margin + column * (labelWidth + gap);
+      const y = margin + row * (labelHeight + gap);
+      const qr = await QRCode.toDataURL(`GPF:ITEM:${item.code}`, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320,
+      });
+
+      doc.setDrawColor(90, 98, 104);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(x, y, labelWidth, labelHeight, 2, 2);
+      doc.addImage(qr, 'PNG', x + 3, y + 6, qrSize, qrSize);
+
+      const textX = x + 33;
+      const textWidth = labelWidth - 37;
+      doc.setTextColor(88, 96, 102);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.text('GPF STOCK', textX, y + 8);
+
+      doc.setTextColor(15, 22, 28);
+      doc.setFontSize(16);
+      doc.text(item.code, textX, y + 16, { maxWidth: textWidth });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      const itemNameLines = doc.splitTextToSize(item.name, textWidth).slice(0, 2);
+      doc.text(itemNameLines, textX, y + 22);
+
+      doc.setTextColor(88, 96, 102);
+      doc.setFontSize(7);
+      doc.text(item.locationName ?? 'Sin ubicacion', textX, y + 34, { maxWidth: textWidth });
     }
     doc.save('gpf-etiquetas-qr.pdf');
   }
