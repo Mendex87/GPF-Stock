@@ -96,6 +96,8 @@ const navItems: Array<{ view: View; label: string; adminOnly?: boolean }> = [
   { view: "admin", label: "Admin", adminOnly: true },
 ];
 
+const ITEMS_PAGE_SIZE = 10;
+
 export function GpfCloudApp() {
   const [client] = useState<SupabaseClient | null>(() =>
     createBrowserSupabaseClient(),
@@ -907,12 +909,24 @@ function ItemsView({
 }) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
+  const [viewing, setViewing] = useState<Item | null>(null);
+  const [page, setPage] = useState(1);
   const items = search(
     data.items,
     query,
     (item) =>
       `${item.code} ${item.name} ${item.categoryName} ${item.locationName ?? ""}`,
   );
+  const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const firstIndex = (currentPage - 1) * ITEMS_PAGE_SIZE;
+  const pageItems = items.slice(firstIndex, firstIndex + ITEMS_PAGE_SIZE);
+  const firstVisible = items.length ? firstIndex + 1 : 0;
+  const lastVisible = Math.min(firstIndex + ITEMS_PAGE_SIZE, items.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, data.items.length]);
 
   return (
     <div className="two-column items-layout">
@@ -931,10 +945,19 @@ function ItemsView({
           <span>{items.length} items</span>
         </div>
         <div className="item-list">
-          {items.map((item) => (
+          {pageItems.map((item) => (
             <article
               className={`item-card ${!item.isActive ? "inactive" : ""}`}
               key={item.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setViewing(item)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setViewing(item);
+                }
+              }}
             >
               <ItemQrCode item={item} />
               <div className="item-summary">
@@ -948,18 +971,25 @@ function ItemsView({
                 </strong>
               </div>
               <div className="row-actions">
-                <button type="button" onClick={() => setEditing(item)}>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setEditing(item);
+                  }}
+                >
                   Editar
                 </button>
                 {profile.isAdmin && (
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={(event) => {
+                      event.stopPropagation();
                       runAction(
                         item.isActive ? "Item archivado" : "Item reactivado",
                         () => setItemActive(client, item.id, !item.isActive),
-                      )
-                    }
+                      );
+                    }}
                   >
                     {item.isActive ? "Archivar" : "Reactivar"}
                   </button>
@@ -967,7 +997,17 @@ function ItemsView({
               </div>
             </article>
           ))}
+          {!items.length && <EmptyState title="Sin items para mostrar" />}
         </div>
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={items.length}
+          firstVisible={firstVisible}
+          lastVisible={lastVisible}
+          onPrevious={() => setPage((value) => Math.max(1, value - 1))}
+          onNext={() => setPage((value) => Math.min(totalPages, value + 1))}
+        />
       </div>
       <div>
         <FormPanel
@@ -1027,6 +1067,16 @@ function ItemsView({
             <button className="primary">Guardar cambios</button>
           </form>
         </Modal>
+      )}
+      {viewing && (
+        <ItemDetailModal
+          item={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={(item) => {
+            setViewing(null);
+            setEditing(item);
+          }}
+        />
       )}
     </div>
   );
@@ -1911,7 +1961,13 @@ function QrScanner({
   );
 }
 
-function ItemQrCode({ item }: { item: Item }) {
+function ItemQrCode({
+  item,
+  variant = "compact",
+}: {
+  item: Item;
+  variant?: "compact" | "large";
+}) {
   const [qrSource, setQrSource] = useState("");
 
   useEffect(() => {
@@ -1934,7 +1990,7 @@ function ItemQrCode({ item }: { item: Item }) {
   }, [item.code]);
 
   return (
-    <div className="item-qr" aria-label={`QR ${item.code}`}>
+    <div className={`item-qr ${variant}`} aria-label={`QR ${item.code}`}>
       {qrSource ? <img src={qrSource} alt="" /> : <span>QR</span>}
     </div>
   );
@@ -1971,6 +2027,157 @@ function ItemPhotoEditor({
           }}
         />
       </label>
+    </div>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  totalPages,
+  totalItems,
+  firstVisible,
+  lastVisible,
+  onPrevious,
+  onNext,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  firstVisible: number;
+  lastVisible: number;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="pagination-controls">
+      <span>
+        {totalItems
+          ? `${firstVisible}-${lastVisible} de ${totalItems}`
+          : "0 items"}
+      </span>
+      <div>
+        <button
+          type="button"
+          className="ghost"
+          onClick={onPrevious}
+          disabled={currentPage <= 1}
+        >
+          Anterior
+        </button>
+        <strong>
+          Pagina {currentPage} / {totalPages}
+        </strong>
+        <button
+          type="button"
+          className="ghost"
+          onClick={onNext}
+          disabled={currentPage >= totalPages}
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ItemDetailModal({
+  item,
+  onClose,
+  onEdit,
+}: {
+  item: Item;
+  onClose: () => void;
+  onEdit: (item: Item) => void;
+}) {
+  const stockTone =
+    item.currentStock < 0
+      ? "red"
+      : item.minimumStock !== null && item.currentStock <= item.minimumStock
+        ? "orange"
+        : "cyan";
+
+  return (
+    <Modal title={`Detalle ${item.code}`} onClose={onClose}>
+      <div className="item-detail">
+        <div className="item-detail-media">
+          <ItemQrCode item={item} variant="large" />
+          {item.photoPath ? (
+            <img
+              className="item-detail-photo"
+              src={item.photoPath}
+              alt={`Foto ${item.code}`}
+            />
+          ) : (
+            <div className="item-detail-photo empty">Sin foto</div>
+          )}
+        </div>
+        <div className="item-detail-main">
+          <p className="code">{item.code}</p>
+          <h2>{item.name}</h2>
+          <div className={`detail-stock ${stockTone}`}>
+            <span>Stock actual</span>
+            <strong>
+              {formatNumber(item.currentStock)} {item.unitSymbol}
+            </strong>
+          </div>
+          <div className="detail-grid">
+            <DetailValue label="Categoria" value={item.categoryName} />
+            <DetailValue label="Unidad" value={item.unitName} />
+            <DetailValue
+              label="Ubicacion"
+              value={item.locationName ?? "Sin ubicacion"}
+            />
+            <DetailValue
+              label="Minimo"
+              value={
+                item.minimumStock === null
+                  ? "Sin minimo"
+                  : `${formatNumber(item.minimumStock)} ${item.unitSymbol}`
+              }
+            />
+            <DetailValue
+              label="Ideal"
+              value={
+                item.idealStock === null
+                  ? "Sin ideal"
+                  : `${formatNumber(item.idealStock)} ${item.unitSymbol}`
+              }
+            />
+            <DetailValue
+              label="Costo"
+              value={
+                item.currentPurchaseCost === null
+                  ? "Sin costo"
+                  : currency(item.currentPurchaseCost)
+              }
+            />
+            <DetailValue
+              label="Estado"
+              value={item.isActive ? "Activo" : "Archivado"}
+            />
+          </div>
+          {item.notes && (
+            <div className="detail-notes">
+              <span>Notas</span>
+              <p>{item.notes}</p>
+            </div>
+          )}
+          <div className="detail-actions">
+            <button type="button" className="primary" onClick={() => onEdit(item)}>
+              Editar item
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DetailValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-value">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
