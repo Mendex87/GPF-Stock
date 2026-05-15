@@ -318,6 +318,7 @@ export async function uploadItemPhoto(client: SupabaseClient, itemId: number, fi
   const { data } = client.storage.from(PHOTO_BUCKET).getPublicUrl(storagePath);
   const { error } = await client.from('items').update({ photo_path: data.publicUrl, updated_at: new Date().toISOString() }).eq('id', itemId);
   if (error) throw error;
+  return data.publicUrl;
 }
 
 export async function createStockEntry(client: SupabaseClient, itemId: number, quantity: number, unitCost: number | null) {

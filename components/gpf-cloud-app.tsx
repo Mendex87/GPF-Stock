@@ -915,36 +915,35 @@ function ItemsView({
   );
 
   return (
-    <div className="two-column">
-      <div>
+    <div className="two-column items-layout">
+      <div className="items-panel">
         <SectionHeader
           title="Items"
           subtitle="Catalogo maestro, QR, foto y stock actual"
         />
-        <input
-          className="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar por codigo, nombre, categoria o ubicacion"
-        />
+        <div className="items-toolbar">
+          <input
+            className="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar por codigo, nombre, categoria o ubicacion"
+          />
+          <span>{items.length} items</span>
+        </div>
         <div className="item-list">
           {items.map((item) => (
             <article
               className={`item-card ${!item.isActive ? "inactive" : ""}`}
               key={item.id}
             >
-              {item.photoPath ? (
-                <img className="item-photo" src={item.photoPath} alt="" />
-              ) : (
-                <div className="item-photo ghost-photo">QR</div>
-              )}
-              <div>
+              <ItemQrCode item={item} />
+              <div className="item-summary">
                 <p className="code">{item.code}</p>
                 <h3>{item.name}</h3>
                 <p>
                   {item.categoryName} · {item.locationName ?? "Sin ubicacion"}
                 </p>
-                <strong>
+                <strong className="item-stock">
                   {formatNumber(item.currentStock)} {item.unitSymbol}
                 </strong>
               </div>
@@ -965,21 +964,6 @@ function ItemsView({
                     {item.isActive ? "Archivar" : "Reactivar"}
                   </button>
                 )}
-                <label className="file-button">
-                  Foto
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0];
-                      if (file)
-                        void runAction("Foto actualizada", () =>
-                          uploadItemPhoto(client, item.id, file),
-                        );
-                    }}
-                  />
-                </label>
               </div>
             </article>
           ))}
@@ -1011,6 +995,19 @@ function ItemsView({
           title={`Editar ${editing.code}`}
           onClose={() => setEditing(null)}
         >
+          <ItemPhotoEditor
+            item={editing}
+            onUpload={(file) =>
+              runAction("Foto actualizada", async () => {
+                const photoPath = await uploadItemPhoto(client, editing.id, file);
+                setEditing((current) =>
+                  current && current.id === editing.id
+                    ? { ...current, photoPath }
+                    : current,
+                );
+              })
+            }
+          />
           <form
             onSubmit={(event) =>
               submitForm(event, async (form) => {
@@ -1914,6 +1911,70 @@ function QrScanner({
   );
 }
 
+function ItemQrCode({ item }: { item: Item }) {
+  const [qrSource, setQrSource] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void QRCode.toDataURL(`GPF:ITEM:${item.code}`, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 180,
+    })
+      .then((source) => {
+        if (!cancelled) setQrSource(source);
+      })
+      .catch(() => {
+        if (!cancelled) setQrSource("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item.code]);
+
+  return (
+    <div className="item-qr" aria-label={`QR ${item.code}`}>
+      {qrSource ? <img src={qrSource} alt="" /> : <span>QR</span>}
+    </div>
+  );
+}
+
+function ItemPhotoEditor({
+  item,
+  onUpload,
+}: {
+  item: Item;
+  onUpload: (file: File) => Promise<void>;
+}) {
+  return (
+    <div className="edit-photo-panel">
+      <div>
+        <span>Foto del item</span>
+        <strong>{item.photoPath ? "Foto cargada" : "Sin foto cargada"}</strong>
+      </div>
+      {item.photoPath ? (
+        <img src={item.photoPath} alt={`Foto ${item.code}`} />
+      ) : (
+        <div className="photo-placeholder">Sin foto</div>
+      )}
+      <label className="file-button">
+        Cambiar foto
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) void onUpload(file);
+            event.currentTarget.value = "";
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 function ItemFields({
   categories,
   units,
@@ -2221,10 +2282,15 @@ function submitForm(
   action: (form: FormData) => Promise<void>,
 ) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  void action(form)
-    .then(() => event.currentTarget.reset())
-    .catch((err) => alert(errorMessage(err)));
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  try {
+    void action(form)
+      .then(() => formElement.reset())
+      .catch((err) => alert(errorMessage(err)));
+  } catch (err) {
+    alert(errorMessage(err));
+  }
 }
 
 function filterByRole(data: AppData, profile: Profile): AppData {
