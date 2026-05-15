@@ -411,7 +411,7 @@ function Dashboard({ data, profile, setView }: { data: AppData; profile: Profile
     <div className="dashboard-grid">
       <div className="hero-panel">
         <p className="eyebrow">Bienvenido, {profile.displayName}</p>
-        <h2>Stock hidraulico en tiempo real, desde cualquier dispositivo.</h2>
+        <h2>Operaciones del taller: entradas, salidas, inventario y reposicion.</h2>
         <div className="hero-actions">
           <button onClick={() => setView('exit')}>Registrar salida</button>
           <button onClick={() => setView('entry')}>Registrar entrada</button>
