@@ -500,6 +500,18 @@ textarea {
   position: relative;
   z-index: 1;
 }
+.hero-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.hero-actions img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.32));
+}
 .system-badges {
   display: flex;
   flex-wrap: wrap;
@@ -579,8 +591,8 @@ textarea {
   border-color: rgba(247, 251, 251, 0.18);
 }
 .quick-tile img {
-  max-width: 66px;
-  max-height: 66px;
+  max-width: 82px;
+  max-height: 82px;
   object-fit: contain;
   filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.38)) saturate(1.22) contrast(1.05);
 }
@@ -1313,6 +1325,15 @@ textarea {
   padding: 0.55rem 0.3rem;
   border-radius: 17px;
   font-size: 0.83rem;
+  display: grid;
+  place-items: center;
+  gap: 0.25rem;
+}
+.mobile-primary-actions img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 7px;
 }
 .mobile-metrics-row {
   display: grid;
@@ -1343,8 +1364,8 @@ textarea {
   border-radius: 18px;
 }
 .mobile-shortcut img {
-  max-width: 42px;
-  max-height: 42px;
+  max-width: 58px;
+  max-height: 58px;
   object-fit: contain;
   filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.32));
 }

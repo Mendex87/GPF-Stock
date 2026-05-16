@@ -751,9 +751,16 @@ function Dashboard({
           Operaciones del taller: entradas, salidas, inventario y reposicion.
         </h2>
         <div className="hero-actions">
-          <button className="danger" onClick={() => setView("exit")}>Registrar salida</button>
-          <button className="primary" onClick={() => setView("entry")}>Registrar entrada</button>
+          <button className="danger" onClick={() => setView("exit")}>
+            <img src="/icons/gpf-new/stock-exit.png" alt="" />
+            Registrar salida
+          </button>
+          <button className="primary" onClick={() => setView("entry")}>
+            <img src="/icons/gpf-new/stock-entry.png" alt="" />
+            Registrar entrada
+          </button>
           <button className="ghost" onClick={() => setView("inventory")}>
+            <img src="/icons/gpf-new/inventory.png" alt="" />
             Inventario fisico
           </button>
         </div>
@@ -775,12 +782,12 @@ function Dashboard({
       />
       <div className="quick-grid">
         {[
-          ["Items", "items", "/icons/stock-box.png"],
-          ["Clientes", "customers", "/icons/clients.png"],
-          ["Historial", "history", "/icons/history-chart.png"],
-          ["Etiquetas", "labels", "/icons/checklist.png"],
-          ["Reposicion", "replenishment", "/icons/cart.png"],
-          ["Ubicaciones", "locations", "/icons/locations.png"],
+          ["Items", "items", "/icons/gpf-new/items-catalog.png"],
+          ["Clientes", "customers", "/icons/gpf-new/clients.png"],
+          ["Historial", "history", "/icons/gpf-new/history.png"],
+          ["Etiquetas", "labels", "/icons/gpf-new/labels-qr.png"],
+          ["Reposicion", "replenishment", "/icons/gpf-new/replenishment.png"],
+          ["Ubicaciones", "locations", "/icons/gpf-new/locations.png"],
         ].map(([label, view, icon]) => (
           <button
             key={view}
@@ -844,6 +851,7 @@ function DashboardMobile({
             type="button"
             onClick={() => setView("exit")}
           >
+            <img src="/icons/gpf-new/stock-exit.png" alt="" />
             Salida
           </button>
           <button
@@ -851,9 +859,11 @@ function DashboardMobile({
             type="button"
             onClick={() => setView("entry")}
           >
+            <img src="/icons/gpf-new/stock-entry.png" alt="" />
             Entrada
           </button>
           <button type="button" onClick={() => setView("inventory")}>
+            <img src="/icons/gpf-new/inventory.png" alt="" />
             Inventario
           </button>
         </div>
@@ -874,12 +884,12 @@ function DashboardMobile({
 
       <section className="mobile-shortcuts">
         {[
-          ["Buscar items", "items", "/icons/stock-box.png"],
-          ["Clientes", "customers", "/icons/clients.png"],
-          ["Historial", "history", "/icons/history-chart.png"],
-          ["Etiquetas", "labels", "/icons/checklist.png"],
-          ["Reposicion", "replenishment", "/icons/cart.png"],
-          ["Ubicaciones", "locations", "/icons/locations.png"],
+          ["Buscar items", "items", "/icons/gpf-new/items-catalog.png"],
+          ["Clientes", "customers", "/icons/gpf-new/clients.png"],
+          ["Historial", "history", "/icons/gpf-new/history.png"],
+          ["Etiquetas", "labels", "/icons/gpf-new/labels-qr.png"],
+          ["Reposicion", "replenishment", "/icons/gpf-new/replenishment.png"],
+          ["Ubicaciones", "locations", "/icons/gpf-new/locations.png"],
         ].map(([label, view, icon]) => (
           <button
             key={view}
@@ -897,7 +907,7 @@ function DashboardMobile({
             type="button"
             onClick={() => setView("admin")}
           >
-            <img src="/icons/admin-gear.png" alt="" />
+            <img src="/icons/gpf-new/admin-settings.png" alt="" />
             <span>Admin</span>
           </button>
         )}
