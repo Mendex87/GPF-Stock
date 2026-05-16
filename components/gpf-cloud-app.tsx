@@ -337,6 +337,7 @@ export function GpfCloudApp() {
     return (
       <MobileShell
         activeView={activeView}
+        data={visibleData}
         profile={profile}
         loadingData={loadingData}
         notice={notice}
@@ -404,7 +405,7 @@ export function GpfCloudApp() {
           </div>
         </header>
 
-        <OpsTicker />
+        <OpsTicker data={visibleData} />
 
         {(notice || error || working) && (
           <div className={`status-line ${error ? "error" : ""}`}>
@@ -522,15 +523,8 @@ function ActiveScreen({
   );
 }
 
-function OpsTicker({ compact = false }: { compact?: boolean }) {
-  const items = [
-    "SUPABASE ONLINE",
-    "QR ACTIVO",
-    "STOCK EN TIEMPO REAL",
-    "SALIDAS TRAZABLES",
-    "REPOSICION MONITOREADA",
-    "GPF CLOUD",
-  ];
+function OpsTicker({ data, compact = false }: { data: AppData; compact?: boolean }) {
+  const items = buildOpsTickerItems(data);
 
   return (
     <div className={`ops-ticker ${compact ? "compact" : ""}`} aria-hidden="true">
@@ -543,8 +537,44 @@ function OpsTicker({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function buildOpsTickerItems(data: AppData) {
+  const activeItems = data.items.filter((item) => item.isActive);
+  const negative = activeItems.filter((item) => item.currentStock < 0);
+  const low = activeItems.filter(
+    (item) =>
+      item.minimumStock !== null &&
+      item.currentStock >= 0 &&
+      item.currentStock <= item.minimumStock,
+  );
+  const withoutLocation = activeItems.filter((item) => !item.locationId);
+  const activeCustomers = data.customers.filter((customer) => customer.isActive);
+  const stockValue = activeItems.reduce(
+    (sum, item) => sum + item.currentStock * (item.currentPurchaseCost ?? 0),
+    0,
+  );
+  const latestMovement = [...data.movements].sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+  )[0];
+  const priorityItem = negative[0] ?? low[0];
+
+  return [
+    priorityItem
+      ? `${negative[0] ? "STOCK NEGATIVO" : "BAJO MINIMO"}: ${priorityItem.code} · ${formatNumber(priorityItem.currentStock)} ${priorityItem.unitSymbol}`
+      : "SIN ALERTAS DE STOCK",
+    `REPOSICION: ${data.replenishment.length} items pendientes`,
+    latestMovement
+      ? `ULTIMO MOV: ${latestMovement.typeLabel} ${latestMovement.number ?? `#${latestMovement.id}`} · ${latestMovement.lines.length} lineas`
+      : "SIN MOVIMIENTOS REGISTRADOS",
+    `ITEMS ACTIVOS: ${activeItems.length}`,
+    `SIN UBICACION: ${withoutLocation.length}`,
+    `CLIENTES ACTIVOS: ${activeCustomers.length}`,
+    `VALOR STOCK: ${currency(stockValue)}`,
+  ];
+}
+
 function MobileShell({
   activeView,
+  data,
   profile,
   loadingData,
   notice,
@@ -556,6 +586,7 @@ function MobileShell({
   children,
 }: {
   activeView: View;
+  data: AppData;
   profile: Profile;
   loadingData: boolean;
   notice: string | null;
@@ -620,7 +651,7 @@ function MobileShell({
         </button>
       </div>
 
-      <OpsTicker compact />
+      <OpsTicker data={data} compact />
 
       {(notice || error || working) && (
         <div className={`status-line ${error ? "error" : ""}`}>

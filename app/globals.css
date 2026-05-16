@@ -441,7 +441,7 @@ textarea {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1.3fr repeat(3, minmax(160px, 0.4fr));
+  grid-template-columns: minmax(360px, 1fr) repeat(3, minmax(170px, 0.58fr));
   gap: 1rem;
 }
 .hero-panel,
@@ -461,11 +461,11 @@ textarea {
   padding: 1.1rem;
 }
 .hero-panel {
-  grid-row: span 2;
-  min-height: 310px;
+  min-height: 238px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 1rem;
   background:
     radial-gradient(circle at 82% 16%, rgba(255, 32, 45, 0.48), transparent 34%),
     radial-gradient(circle at 16% 82%, rgba(53, 217, 230, 0.22), transparent 28%),
@@ -480,22 +480,22 @@ textarea {
   bottom: -1.5rem;
   color: rgba(247, 251, 251, 0.055);
   font-family: "Archivo Black", sans-serif;
-  font-size: clamp(7rem, 18vw, 15rem);
+  font-size: clamp(5rem, 12vw, 10rem);
   letter-spacing: -0.1em;
   pointer-events: none;
 }
 .hero-panel h2 {
   font-family: "Archivo Black", sans-serif;
   letter-spacing: -0.07em;
-  font-size: clamp(2.2rem, 5vw, 5.2rem);
-  line-height: 0.9;
+  font-size: clamp(1.95rem, 3vw, 3.45rem);
+  line-height: 0.92;
   margin: 0;
   position: relative;
   z-index: 1;
 }
 .hero-actions {
   display: flex;
-  gap: 0.7rem;
+  gap: 0.55rem;
   flex-wrap: wrap;
   position: relative;
   z-index: 1;
@@ -503,11 +503,12 @@ textarea {
 .hero-actions button {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
+  padding: 0.66rem 0.82rem;
 }
 .hero-actions img {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   border-radius: 8px;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.32));
