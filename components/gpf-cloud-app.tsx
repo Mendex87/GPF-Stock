@@ -98,6 +98,8 @@ const navItems: Array<{ view: View; label: string; adminOnly?: boolean }> = [
   { view: "admin", label: "Admin", adminOnly: true },
 ];
 
+const APP_VERSION = "1.0.0";
+
 const dashboardModules: Array<{
   view: View;
   label: string;
@@ -378,6 +380,7 @@ export function GpfCloudApp() {
         </nav>
         <div className="rail-footer">
           <span>{profile.displayName}</span>
+          <span className="app-version">GPF Cloud v{APP_VERSION}</span>
           <button type="button" onClick={signOut}>
             Salir
           </button>
@@ -616,6 +619,7 @@ function MobileShell({
           <div>
             <strong>GPF Cloud</strong>
             <span>{profile.displayName}</span>
+            <span className="app-version">v{APP_VERSION}</span>
           </div>
         </div>
         <button

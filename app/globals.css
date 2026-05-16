@@ -311,6 +311,13 @@ textarea {
 .muted {
   color: var(--muted);
 }
+.app-version {
+  color: rgba(247, 251, 251, 0.52) !important;
+  font-family: "Chivo Mono", monospace;
+  font-size: 0.64rem !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 .rail nav {
   display: grid;
   gap: 0.45rem;
@@ -1323,6 +1330,10 @@ textarea {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
+}
+.mobile-brand .app-version {
+  margin-top: 0.08rem;
+  font-size: 0.58rem !important;
 }
 .mobile-topbar button {
   padding: 0.62rem 0.78rem;
