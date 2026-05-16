@@ -37,6 +37,7 @@ import type {
   Location,
   Profile,
   ReplenishmentItem,
+  Role,
   StockMovement,
   UnitOfMeasure,
 } from "@/lib/types";
@@ -112,6 +113,8 @@ const argentinaDateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
+  hour12: false,
+  hourCycle: "h23",
 });
 
 const dashboardModules: Array<{
@@ -2230,32 +2233,92 @@ function AdminView({
   data: AppData;
   runAction: ActionRunner;
 }) {
+  const users = sortAdminUsers(data.adminUsers);
+  const categories = sortCategories(data.categories);
+  const activeUsers = data.adminUsers.filter((user) => user.isActive);
+  const adminUsers = activeUsers.filter((user) => isAdminRole(user.role));
+  const authMissing = activeUsers.filter((user) => !user.hasAuthUser);
+  const activeCategories = data.categories.filter((category) => category.isActive);
+
   return (
-    <div className="two-column">
-      <div>
-        <SectionHeader
-          title="Usuarios"
-          subtitle="Alta de operadores y administradores"
-        />
-        <DataList
-          rows={data.adminUsers}
-          render={(user) => (
-            <article
-              className={`data-row ${!user.isActive ? "inactive" : ""}`}
-              key={user.id}
-            >
-              <div>
-                <strong>{user.username}</strong>
-                <span>
-                  {user.displayName} · {user.role} ·{" "}
-                  {user.hasAuthUser ? "Auth OK" : "Sin Auth"}
-                </span>
-              </div>
-            </article>
-          )}
-        />
+    <div className="admin-layout">
+      <div className="admin-main">
+        <div className="admin-hero">
+          <SectionHeader
+            title="Administracion"
+            subtitle="Usuarios, categorias y permisos operativos"
+          />
+          <div className="admin-kpis" aria-label="Resumen administrativo">
+            <ItemKpi label="Usuarios" value={activeUsers.length} tone="cyan" />
+            <ItemKpi label="Admins" value={adminUsers.length} tone="red" />
+            <ItemKpi label="Sin Auth" value={authMissing.length} tone="orange" />
+            <ItemKpi
+              label="Categorias"
+              value={activeCategories.length}
+              tone="green"
+            />
+          </div>
+        </div>
+
+        <section className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <p className="eyebrow">Accesos</p>
+              <h3>Usuarios del sistema</h3>
+            </div>
+            <span>{users.length} registros</span>
+          </div>
+          <div className="admin-list">
+            {users.map((user) => (
+              <article
+                className={`admin-user-row ${!user.isActive ? "inactive" : ""}`}
+                key={user.id}
+              >
+                <div className="admin-avatar" aria-hidden="true">
+                  {initials(user.displayName || user.username)}
+                </div>
+                <div>
+                  <div className="admin-row-title">
+                    <strong>{user.displayName}</strong>
+                    <span className={isAdminRole(user.role) ? "role-admin" : ""}>
+                      {roleLabel(user.role)}
+                    </span>
+                  </div>
+                  <p>
+                    @{user.username} · {user.hasAuthUser ? "Auth OK" : "Sin Auth"}
+                    {!user.isActive ? " · Archivado" : ""}
+                  </p>
+                </div>
+              </article>
+            ))}
+            {!users.length && <EmptyState title="Sin usuarios" />}
+          </div>
+        </section>
+
+        <section className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <p className="eyebrow">Catalogo</p>
+              <h3>Categorias</h3>
+            </div>
+            <span>{categories.length} registros</span>
+          </div>
+          <div className="admin-category-grid">
+            {categories.map((category) => (
+              <article
+                className={`admin-category ${!category.isActive ? "inactive" : ""}`}
+                key={category.id}
+              >
+                <span>{category.codePrefix ?? "SIN"}</span>
+                <strong>{category.name}</strong>
+                <small>{category.isActive ? "Activa" : "Archivada"}</small>
+              </article>
+            ))}
+            {!categories.length && <EmptyState title="Sin categorias" />}
+          </div>
+        </section>
       </div>
-      <div className="stack">
+      <div className="stack admin-actions">
         <FormPanel
           title="Nuevo usuario"
           subtitle="Usa usuario corto; el email interno sera @gpf.local"
@@ -3089,6 +3152,40 @@ function sortItems(items: Item[], sortMode: ItemSort) {
     if (sortMode === "stock-desc") return b.currentStock - a.currentStock;
     return a.code.localeCompare(b.code, "es", { numeric: true });
   });
+}
+
+function sortAdminUsers(users: AdminUser[]) {
+  return [...users].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    if (isAdminRole(a.role) !== isAdminRole(b.role)) {
+      return isAdminRole(a.role) ? -1 : 1;
+    }
+    return a.username.localeCompare(b.username, "es", { numeric: true });
+  });
+}
+
+function sortCategories(categories: Category[]) {
+  return [...categories].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    return a.name.localeCompare(b.name, "es");
+  });
+}
+
+function isAdminRole(role: Role) {
+  return role === "technical_admin" || role === "admin";
+}
+
+function roleLabel(role: Role) {
+  if (role === "operator") return "Operador";
+  if (role === "technical_admin") return "Admin tecnico";
+  return "Admin";
+}
+
+function initials(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "G";
+  const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
+  return `${first}${second ?? "P"}`.toUpperCase();
 }
 
 async function prepareItemPhotoFile(file: File) {
