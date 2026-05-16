@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import QRCode from "qrcode";
 import { jsPDF } from "jspdf";
@@ -2912,7 +2913,18 @@ function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  const modal = (
     <div className="modal-backdrop">
       <div className="modal">
         <header>
@@ -2923,6 +2935,8 @@ function Modal({
       </div>
     </div>
   );
+
+  return mounted ? createPortal(modal, document.body) : null;
 }
 
 function submitForm(

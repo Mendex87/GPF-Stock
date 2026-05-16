@@ -1447,15 +1447,16 @@ textarea {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 1000;
   background: rgba(0, 0, 0, 0.64);
   display: grid;
   place-items: center;
   padding: 1rem;
+  overflow: auto;
 }
 .modal {
   width: min(720px, 100%);
-  max-height: 92vh;
+  max-height: calc(100dvh - 2rem);
   overflow: auto;
   border-radius: 16px;
   padding: 1rem;
