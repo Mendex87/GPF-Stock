@@ -1244,11 +1244,7 @@ function ItemsView({
               }}
             >
               <div className="item-media">
-                {item.photoPath ? (
-                  <img src={item.photoPath} alt={`Foto ${item.code}`} />
-                ) : (
-                  <ItemQrCode item={item} />
-                )}
+                <ItemPhotoThumb item={item} />
               </div>
               <div className="item-summary">
                 <div className="item-summary-top">
@@ -1346,7 +1342,12 @@ function ItemsView({
             item={editing}
             onUpload={(file) =>
               runAction("Foto actualizada", async () => {
-                const photoPath = await uploadItemPhoto(client, editing.id, file);
+                const preparedFile = await prepareItemPhotoFile(file);
+                const photoPath = await uploadItemPhoto(
+                  client,
+                  editing.id,
+                  preparedFile,
+                );
                 setEditing((current) =>
                   current && current.id === editing.id
                     ? { ...current, photoPath }
@@ -2404,6 +2405,18 @@ function ItemQrCode({
   );
 }
 
+function ItemPhotoThumb({ item }: { item: Item }) {
+  if (item.photoPath) {
+    return <img src={item.photoPath} alt={`Foto ${item.code}`} />;
+  }
+
+  return (
+    <div className="item-photo-placeholder" aria-label={`Sin foto ${item.code}`}>
+      <span>Sin foto</span>
+    </div>
+  );
+}
+
 function ItemPhotoEditor({
   item,
   onUpload,
@@ -2429,9 +2442,12 @@ function ItemPhotoEditor({
           accept="image/*"
           capture="environment"
           onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            if (file) void onUpload(file);
-            event.currentTarget.value = "";
+            const input = event.currentTarget;
+            const file = input.files?.[0];
+            if (!file) return;
+            void onUpload(file).finally(() => {
+              input.value = "";
+            });
           }}
         />
       </label>
@@ -2979,10 +2995,66 @@ function matchesItemStockFilter(item: Item, filter: ItemStockFilter) {
 
 function sortItems(items: Item[], sortMode: ItemSort) {
   return [...items].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
     if (sortMode === "name") return a.name.localeCompare(b.name, "es");
     if (sortMode === "stock-asc") return a.currentStock - b.currentStock;
     if (sortMode === "stock-desc") return b.currentStock - a.currentStock;
     return a.code.localeCompare(b.code, "es", { numeric: true });
+  });
+}
+
+async function prepareItemPhotoFile(file: File) {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+
+  try {
+    const image = await loadImageFile(file);
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+
+    if (scale === 1 && file.type === "image/jpeg" && file.size < 1_500_000) {
+      return file;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.82),
+    );
+    if (!blob) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "item-photo";
+    return new File([blob], `${baseName}.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch (error) {
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) {
+      throw new Error(
+        "No se pudo procesar la foto HEIC/HEIF. En el movil usa JPG o 'Mas compatible' y volve a intentar.",
+      );
+    }
+    return file;
+  }
+}
+
+function loadImageFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const source = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(source);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(source);
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+    image.src = source;
   });
 }
 
