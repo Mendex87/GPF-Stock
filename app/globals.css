@@ -318,6 +318,14 @@ textarea {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+.argentina-clock {
+  color: rgba(53, 217, 230, 0.78) !important;
+  font-family: "Chivo Mono", monospace;
+  font-size: 0.63rem !important;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .rail nav {
   display: grid;
   gap: 0.45rem;
@@ -1237,6 +1245,35 @@ textarea {
   position: sticky;
   top: 1rem;
 }
+.inline-create-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.9rem 0 1rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(53, 217, 230, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(53, 217, 230, 0.09), rgba(247, 251, 251, 0.035));
+}
+.inline-create-panel span {
+  display: block;
+  color: var(--muted);
+  font-family: "Chivo Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inline-create-panel strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.86rem;
+}
+.inline-create-panel button {
+  min-height: 38px;
+  padding: 0.48rem 0.72rem;
+}
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1524,6 +1561,14 @@ textarea {
 .mobile-brand .app-version {
   margin-top: 0.08rem;
   font-size: 0.58rem !important;
+}
+.mobile-brand .argentina-clock {
+  margin-top: 0.08rem;
+  max-width: 52vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.56rem !important;
 }
 .mobile-topbar button {
   padding: 0.62rem 0.78rem;

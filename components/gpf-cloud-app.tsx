@@ -103,6 +103,16 @@ const navItems: Array<{ view: View; label: string; adminOnly?: boolean }> = [
 ];
 
 const APP_VERSION = "1.0.0";
+const argentinaDateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
+  timeZone: "America/Argentina/Buenos_Aires",
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
 
 const dashboardModules: Array<{
   view: View;
@@ -385,6 +395,7 @@ export function GpfCloudApp() {
         <div className="rail-footer">
           <span>{profile.displayName}</span>
           <span className="app-version">GPF Cloud v{APP_VERSION}</span>
+          <ArgentinaClock />
           <button type="button" onClick={signOut}>
             Salir
           </button>
@@ -624,6 +635,7 @@ function MobileShell({
             <strong>GPF Cloud</strong>
             <span>{profile.displayName}</span>
             <span className="app-version">v{APP_VERSION}</span>
+            <ArgentinaClock compact />
           </div>
         </div>
         <button
@@ -1055,6 +1067,7 @@ function ItemsView({
   const [sortMode, setSortMode] = useState<ItemSort>("code");
   const [editing, setEditing] = useState<Item | null>(null);
   const [viewing, setViewing] = useState<Item | null>(null);
+  const [creatingLocation, setCreatingLocation] = useState(false);
   const [page, setPage] = useState(1);
   const activeItems = data.items.filter((item) => item.isActive);
   const lowItems = activeItems.filter((item) => itemStockTone(item) === "orange");
@@ -1318,6 +1331,19 @@ function ItemsView({
           title="Nuevo item"
           subtitle="El codigo se genera con el prefijo de la categoria"
         >
+          <div className="inline-create-panel">
+            <div>
+              <span>Ubicacion nueva</span>
+              <strong>Creala antes de guardar el item</strong>
+            </div>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setCreatingLocation(true)}
+            >
+              Nueva ubicacion
+            </button>
+          </div>
           <form
             onSubmit={(event) =>
               submitForm(event, (form) =>
@@ -1334,6 +1360,26 @@ function ItemsView({
           </form>
         </FormPanel>
       </div>
+      {creatingLocation && (
+        <Modal
+          title="Nueva ubicacion"
+          onClose={() => setCreatingLocation(false)}
+        >
+          <form
+            onSubmit={(event) =>
+              submitForm(event, async (form) => {
+                await runAction("Ubicacion creada", () =>
+                  createLocation(client, form),
+                );
+                setCreatingLocation(false);
+              })
+            }
+          >
+            <LocationFields />
+            <button className="primary">Crear ubicacion</button>
+          </form>
+        </Modal>
+      )}
       {editing && (
         <Modal
           title={`Editar ${editing.code}`}
@@ -1950,22 +1996,7 @@ function LocationsView({
             )
           }
         >
-          <label>
-            Nombre base
-            <input name="name" required placeholder="Estanteria" />
-          </label>
-          <label>
-            Fila
-            <input name="rowNumber" type="number" min="1" />
-          </label>
-          <label>
-            Columna
-            <input name="columnLetter" maxLength={3} placeholder="A" />
-          </label>
-          <label>
-            Descripcion
-            <textarea name="description" rows={3} />
-          </label>
+          <LocationFields />
           <button className="primary">Crear ubicacion</button>
         </form>
       </FormPanel>
@@ -2748,6 +2779,29 @@ function CustomerFields({ customer }: { customer?: Customer }) {
   );
 }
 
+function LocationFields() {
+  return (
+    <>
+      <label>
+        Nombre base
+        <input name="name" required placeholder="Estanteria" />
+      </label>
+      <label>
+        Fila
+        <input name="rowNumber" type="number" min="1" />
+      </label>
+      <label>
+        Columna
+        <input name="columnLetter" maxLength={3} placeholder="A" />
+      </label>
+      <label>
+        Descripcion
+        <textarea name="description" rows={3} />
+      </label>
+    </>
+  );
+}
+
 function ItemSelect({
   items,
   value,
@@ -2810,6 +2864,26 @@ function SectionHeader({
       <h2>{title}</h2>
       <span>{subtitle}</span>
     </div>
+  );
+}
+
+function ArgentinaClock({ compact = false }: { compact?: boolean }) {
+  const [value, setValue] = useState("--/--/---- --:--:--");
+
+  useEffect(() => {
+    const update = () => {
+      setValue(formatArgentinaDateTime(new Date()));
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <span className={`argentina-clock ${compact ? "compact" : ""}`}>
+      ARG {value}
+    </span>
   );
 }
 
@@ -3178,6 +3252,10 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 }).format(
     value,
   );
+}
+
+function formatArgentinaDateTime(value: Date) {
+  return argentinaDateTimeFormatter.format(value).replace(",", "");
 }
 
 function currency(value: number) {
