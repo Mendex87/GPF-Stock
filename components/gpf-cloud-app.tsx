@@ -55,6 +55,8 @@ type View =
 
 type LayoutMode = "desktop" | "mobile";
 
+type ModuleTone = "cyan" | "green" | "orange" | "red" | "yellow" | "blue";
+
 type AppData = {
   categories: Category[];
   units: UnitOfMeasure[];
@@ -94,6 +96,64 @@ const navItems: Array<{ view: View; label: string; adminOnly?: boolean }> = [
   { view: "labels", label: "Etiquetas" },
   { view: "replenishment", label: "Reposicion" },
   { view: "admin", label: "Admin", adminOnly: true },
+];
+
+const dashboardModules: Array<{
+  view: View;
+  label: string;
+  shortLabel: string;
+  meta: string;
+  icon: string;
+  tone: ModuleTone;
+}> = [
+  {
+    view: "items",
+    label: "Items",
+    shortLabel: "Items",
+    meta: "Catalogo + QR",
+    icon: "/icons/gpf-new/items-catalog.png",
+    tone: "cyan",
+  },
+  {
+    view: "customers",
+    label: "Clientes",
+    shortLabel: "Clientes",
+    meta: "Asignacion taller",
+    icon: "/icons/gpf-new/clients.png",
+    tone: "red",
+  },
+  {
+    view: "history",
+    label: "Historial",
+    shortLabel: "Historial",
+    meta: "Trazabilidad",
+    icon: "/icons/gpf-new/history.png",
+    tone: "orange",
+  },
+  {
+    view: "labels",
+    label: "Etiquetas",
+    shortLabel: "Etiquetas",
+    meta: "PDF / escaneo",
+    icon: "/icons/gpf-new/labels-qr.png",
+    tone: "blue",
+  },
+  {
+    view: "replenishment",
+    label: "Reposicion",
+    shortLabel: "Reposicion",
+    meta: "Minimos activos",
+    icon: "/icons/gpf-new/replenishment.png",
+    tone: "yellow",
+  },
+  {
+    view: "locations",
+    label: "Ubicaciones",
+    shortLabel: "Ubicaciones",
+    meta: "Rack / zona",
+    icon: "/icons/gpf-new/locations.png",
+    tone: "green",
+  },
 ];
 
 const ITEMS_PAGE_SIZE = 10;
@@ -781,21 +841,24 @@ function Dashboard({
         tone="steel"
       />
       <div className="quick-grid">
-        {[
-          ["Items", "items", "/icons/gpf-new/items-catalog.png"],
-          ["Clientes", "customers", "/icons/gpf-new/clients.png"],
-          ["Historial", "history", "/icons/gpf-new/history.png"],
-          ["Etiquetas", "labels", "/icons/gpf-new/labels-qr.png"],
-          ["Reposicion", "replenishment", "/icons/gpf-new/replenishment.png"],
-          ["Ubicaciones", "locations", "/icons/gpf-new/locations.png"],
-        ].map(([label, view, icon]) => (
+        {dashboardModules.map((module, index) => (
           <button
-            key={view}
-            className="quick-tile"
-            onClick={() => setView(view as View)}
+            key={module.view}
+            className={`quick-tile tone-${module.tone}`}
+            onClick={() => setView(module.view)}
+            aria-label={`Abrir ${module.label}`}
           >
-            <img src={icon} alt="" />
-            <span>{label}</span>
+            <span className="quick-tile-index">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="quick-tile-light" aria-hidden="true" />
+            <span className="quick-tile-icon">
+              <img src={module.icon} alt="" />
+            </span>
+            <span className="quick-tile-copy">
+              <b>{module.label}</b>
+              <small>{module.meta}</small>
+            </span>
           </button>
         ))}
       </div>
@@ -883,30 +946,26 @@ function DashboardMobile({
       </section>
 
       <section className="mobile-shortcuts">
-        {[
-          ["Buscar items", "items", "/icons/gpf-new/items-catalog.png"],
-          ["Clientes", "customers", "/icons/gpf-new/clients.png"],
-          ["Historial", "history", "/icons/gpf-new/history.png"],
-          ["Etiquetas", "labels", "/icons/gpf-new/labels-qr.png"],
-          ["Reposicion", "replenishment", "/icons/gpf-new/replenishment.png"],
-          ["Ubicaciones", "locations", "/icons/gpf-new/locations.png"],
-        ].map(([label, view, icon]) => (
+        {dashboardModules.map((module, index) => (
           <button
-            key={view}
-            className="mobile-shortcut"
+            key={module.view}
+            className={`mobile-shortcut tone-${module.tone}`}
             type="button"
-            onClick={() => setView(view as View)}
+            onClick={() => setView(module.view)}
+            aria-label={`Abrir ${module.label}`}
           >
-            <img src={icon} alt="" />
-            <span>{label}</span>
+            <span className="mobile-shortcut-code">M{index + 1}</span>
+            <img src={module.icon} alt="" />
+            <span>{module.shortLabel}</span>
           </button>
         ))}
         {profile.isAdmin && (
           <button
-            className="mobile-shortcut"
+            className="mobile-shortcut tone-red"
             type="button"
             onClick={() => setView("admin")}
           >
+            <span className="mobile-shortcut-code">ADM</span>
             <img src="/icons/gpf-new/admin-settings.png" alt="" />
             <span>Admin</span>
           </button>
