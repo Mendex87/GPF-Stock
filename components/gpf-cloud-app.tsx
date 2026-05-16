@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import QRCode from "qrcode";
 import { jsPDF } from "jspdf";
@@ -36,6 +37,7 @@ import type {
   Location,
   Profile,
   ReplenishmentItem,
+  Role,
   StockMovement,
   UnitOfMeasure,
 } from "@/lib/types";
@@ -56,6 +58,9 @@ type View =
 type LayoutMode = "desktop" | "mobile";
 
 type ModuleTone = "cyan" | "green" | "orange" | "red" | "yellow" | "blue";
+type ItemStatusFilter = "all" | "active" | "inactive";
+type ItemStockFilter = "all" | "negative" | "low" | "ok" | "no-location";
+type ItemSort = "code" | "name" | "stock-asc" | "stock-desc";
 
 type AppData = {
   categories: Category[];
@@ -99,6 +104,18 @@ const navItems: Array<{ view: View; label: string; adminOnly?: boolean }> = [
 ];
 
 const APP_VERSION = "1.0.0";
+const argentinaDateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
+  timeZone: "America/Argentina/Buenos_Aires",
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+  hourCycle: "h23",
+});
 
 const dashboardModules: Array<{
   view: View;
@@ -381,6 +398,7 @@ export function GpfCloudApp() {
         <div className="rail-footer">
           <span>{profile.displayName}</span>
           <span className="app-version">GPF Cloud v{APP_VERSION}</span>
+          <ArgentinaClock />
           <button type="button" onClick={signOut}>
             Salir
           </button>
@@ -620,6 +638,7 @@ function MobileShell({
             <strong>GPF Cloud</strong>
             <span>{profile.displayName}</span>
             <span className="app-version">v{APP_VERSION}</span>
+            <ArgentinaClock compact />
           </div>
         </div>
         <button
@@ -1044,14 +1063,50 @@ function ItemsView({
   runAction: ActionRunner;
 }) {
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ItemStatusFilter>("all");
+  const [stockFilter, setStockFilter] = useState<ItemStockFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [sortMode, setSortMode] = useState<ItemSort>("code");
   const [editing, setEditing] = useState<Item | null>(null);
   const [viewing, setViewing] = useState<Item | null>(null);
+  const [creatingLocation, setCreatingLocation] = useState(false);
   const [page, setPage] = useState(1);
-  const items = search(
-    data.items,
-    query,
-    (item) =>
-      `${item.code} ${item.name} ${item.categoryName} ${item.locationName ?? ""}`,
+  const activeItems = data.items.filter((item) => item.isActive);
+  const lowItems = activeItems.filter((item) => itemStockTone(item) === "orange");
+  const negativeItems = activeItems.filter((item) => itemStockTone(item) === "red");
+  const noLocationItems = activeItems.filter((item) => !item.locationId);
+  const archivedItems = data.items.filter((item) => !item.isActive);
+  const categoryOptions = data.categories.filter((category) => category.isActive);
+  const locationOptions = data.locations.filter((location) => location.isActive);
+  const hasFilters =
+    query.trim() ||
+    statusFilter !== "all" ||
+    stockFilter !== "all" ||
+    categoryFilter !== "all" ||
+    locationFilter !== "all" ||
+    sortMode !== "code";
+  const items = sortItems(
+    search(data.items, query, itemSearchText)
+      .filter((item) =>
+        statusFilter === "all"
+          ? true
+          : statusFilter === "active"
+            ? item.isActive
+            : !item.isActive,
+      )
+      .filter((item) =>
+        categoryFilter === "all" ? true : item.categoryId === Number(categoryFilter),
+      )
+      .filter((item) =>
+        locationFilter === "all"
+          ? true
+          : locationFilter === "none"
+            ? !item.locationId
+            : item.locationId === Number(locationFilter),
+      )
+      .filter((item) => matchesItemStockFilter(item, stockFilter)),
+    sortMode,
   );
   const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -1062,28 +1117,138 @@ function ItemsView({
 
   useEffect(() => {
     setPage(1);
-  }, [query, data.items.length]);
+  }, [
+    query,
+    statusFilter,
+    stockFilter,
+    categoryFilter,
+    locationFilter,
+    sortMode,
+    data.items.length,
+  ]);
 
   return (
     <div className="two-column items-layout">
       <div className="items-panel">
-        <SectionHeader
-          title="Items"
-          subtitle="Catalogo maestro, QR, foto y stock actual"
-        />
-        <div className="items-toolbar">
-          <input
-            className="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por codigo, nombre, categoria o ubicacion"
+        <div className="items-hero">
+          <SectionHeader
+            title="Items"
+            subtitle="Catalogo maestro, QR, foto y stock actual"
           />
-          <span>{items.length} items</span>
+          <div className="items-kpis" aria-label="Resumen de items">
+            <ItemKpi label="Activos" value={activeItems.length} tone="cyan" />
+            <ItemKpi label="Bajo min." value={lowItems.length} tone="orange" />
+            <ItemKpi label="Negativos" value={negativeItems.length} tone="red" />
+            <ItemKpi label="Sin ubic." value={noLocationItems.length} tone="green" />
+            {profile.isAdmin && (
+              <ItemKpi label="Archivados" value={archivedItems.length} tone="steel" />
+            )}
+          </div>
+        </div>
+
+        <div className="items-toolbar">
+          <label className="items-search">
+            Busqueda operativa
+            <input
+              className="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Codigo, nombre, categoria, ubicacion, notas..."
+            />
+          </label>
+          <label>
+            Estado
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as ItemStatusFilter)
+              }
+            >
+              <option value="all">Todos</option>
+              <option value="active">Activos</option>
+              {profile.isAdmin && <option value="inactive">Archivados</option>}
+            </select>
+          </label>
+          <label>
+            Stock
+            <select
+              value={stockFilter}
+              onChange={(event) =>
+                setStockFilter(event.target.value as ItemStockFilter)
+              }
+            >
+              <option value="all">Todos</option>
+              <option value="negative">Negativo</option>
+              <option value="low">Bajo minimo</option>
+              <option value="ok">OK</option>
+              <option value="no-location">Sin ubicacion</option>
+            </select>
+          </label>
+          <label>
+            Categoria
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              {categoryOptions.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Ubicacion
+            <select
+              value={locationFilter}
+              onChange={(event) => setLocationFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              <option value="none">Sin ubicacion</option>
+              {locationOptions.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.displayCode} · {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Orden
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as ItemSort)}
+            >
+              <option value="code">Codigo</option>
+              <option value="name">Nombre</option>
+              <option value="stock-asc">Menor stock</option>
+              <option value="stock-desc">Mayor stock</option>
+            </select>
+          </label>
+          <div className="items-toolbar-actions">
+            <strong>{items.length} resultados</strong>
+            {hasFilters && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setQuery("");
+                  setStatusFilter("all");
+                  setStockFilter("all");
+                  setCategoryFilter("all");
+                  setLocationFilter("all");
+                  setSortMode("code");
+                }}
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
         <div className="item-list">
           {pageItems.map((item) => (
             <article
-              className={`item-card ${!item.isActive ? "inactive" : ""}`}
+              className={`item-card stock-${itemStockTone(item)} ${!item.isActive ? "inactive" : ""}`}
               key={item.id}
               role="button"
               tabIndex={0}
@@ -1095,18 +1260,37 @@ function ItemsView({
                 }
               }}
             >
-              <ItemQrCode item={item} />
+              <div className="item-media">
+                <ItemPhotoThumb item={item} />
+              </div>
               <div className="item-summary">
-                <p className="code">{item.code}</p>
+                <div className="item-summary-top">
+                  <p className="code">{item.code}</p>
+                  <span className={`item-state stock-${itemStockTone(item)}`}>
+                    {itemStockLabel(item)}
+                  </span>
+                </div>
                 <h3>{item.name}</h3>
-                <p>
-                  {item.categoryName} · {item.locationName ?? "Sin ubicacion"}
-                </p>
-                <strong className="item-stock">
+                <div className="item-tags">
+                  <span>{item.categoryName}</span>
+                  <span>{item.locationName ?? "Sin ubicacion"}</span>
+                  {!item.isActive && <span>Archivado</span>}
+                </div>
+                <strong className={`item-stock stock-${itemStockTone(item)}`}>
                   {formatNumber(item.currentStock)} {item.unitSymbol}
                 </strong>
               </div>
               <div className="row-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setViewing(item);
+                  }}
+                >
+                  Ver
+                </button>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -1150,6 +1334,19 @@ function ItemsView({
           title="Nuevo item"
           subtitle="El codigo se genera con el prefijo de la categoria"
         >
+          <div className="inline-create-panel">
+            <div>
+              <span>Ubicacion nueva</span>
+              <strong>Creala antes de guardar el item</strong>
+            </div>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setCreatingLocation(true)}
+            >
+              Nueva ubicacion
+            </button>
+          </div>
           <form
             onSubmit={(event) =>
               submitForm(event, (form) =>
@@ -1166,6 +1363,26 @@ function ItemsView({
           </form>
         </FormPanel>
       </div>
+      {creatingLocation && (
+        <Modal
+          title="Nueva ubicacion"
+          onClose={() => setCreatingLocation(false)}
+        >
+          <form
+            onSubmit={(event) =>
+              submitForm(event, async (form) => {
+                await runAction("Ubicacion creada", () =>
+                  createLocation(client, form),
+                );
+                setCreatingLocation(false);
+              })
+            }
+          >
+            <LocationFields />
+            <button className="primary">Crear ubicacion</button>
+          </form>
+        </Modal>
+      )}
       {editing && (
         <Modal
           title={`Editar ${editing.code}`}
@@ -1175,7 +1392,12 @@ function ItemsView({
             item={editing}
             onUpload={(file) =>
               runAction("Foto actualizada", async () => {
-                const photoPath = await uploadItemPhoto(client, editing.id, file);
+                const preparedFile = await prepareItemPhotoFile(file);
+                const photoPath = await uploadItemPhoto(
+                  client,
+                  editing.id,
+                  preparedFile,
+                );
                 setEditing((current) =>
                   current && current.id === editing.id
                     ? { ...current, photoPath }
@@ -1777,22 +1999,7 @@ function LocationsView({
             )
           }
         >
-          <label>
-            Nombre base
-            <input name="name" required placeholder="Estanteria" />
-          </label>
-          <label>
-            Fila
-            <input name="rowNumber" type="number" min="1" />
-          </label>
-          <label>
-            Columna
-            <input name="columnLetter" maxLength={3} placeholder="A" />
-          </label>
-          <label>
-            Descripcion
-            <textarea name="description" rows={3} />
-          </label>
+          <LocationFields />
           <button className="primary">Crear ubicacion</button>
         </form>
       </FormPanel>
@@ -2026,32 +2233,92 @@ function AdminView({
   data: AppData;
   runAction: ActionRunner;
 }) {
+  const users = sortAdminUsers(data.adminUsers);
+  const categories = sortCategories(data.categories);
+  const activeUsers = data.adminUsers.filter((user) => user.isActive);
+  const adminUsers = activeUsers.filter((user) => isAdminRole(user.role));
+  const authMissing = activeUsers.filter((user) => !user.hasAuthUser);
+  const activeCategories = data.categories.filter((category) => category.isActive);
+
   return (
-    <div className="two-column">
-      <div>
-        <SectionHeader
-          title="Usuarios"
-          subtitle="Alta de operadores y administradores"
-        />
-        <DataList
-          rows={data.adminUsers}
-          render={(user) => (
-            <article
-              className={`data-row ${!user.isActive ? "inactive" : ""}`}
-              key={user.id}
-            >
-              <div>
-                <strong>{user.username}</strong>
-                <span>
-                  {user.displayName} · {user.role} ·{" "}
-                  {user.hasAuthUser ? "Auth OK" : "Sin Auth"}
-                </span>
-              </div>
-            </article>
-          )}
-        />
+    <div className="admin-layout">
+      <div className="admin-main">
+        <div className="admin-hero">
+          <SectionHeader
+            title="Administracion"
+            subtitle="Usuarios, categorias y permisos operativos"
+          />
+          <div className="admin-kpis" aria-label="Resumen administrativo">
+            <ItemKpi label="Usuarios" value={activeUsers.length} tone="cyan" />
+            <ItemKpi label="Admins" value={adminUsers.length} tone="red" />
+            <ItemKpi label="Sin Auth" value={authMissing.length} tone="orange" />
+            <ItemKpi
+              label="Categorias"
+              value={activeCategories.length}
+              tone="green"
+            />
+          </div>
+        </div>
+
+        <section className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <p className="eyebrow">Accesos</p>
+              <h3>Usuarios del sistema</h3>
+            </div>
+            <span>{users.length} registros</span>
+          </div>
+          <div className="admin-list">
+            {users.map((user) => (
+              <article
+                className={`admin-user-row ${!user.isActive ? "inactive" : ""}`}
+                key={user.id}
+              >
+                <div className="admin-avatar" aria-hidden="true">
+                  {initials(user.displayName || user.username)}
+                </div>
+                <div>
+                  <div className="admin-row-title">
+                    <strong>{user.displayName}</strong>
+                    <span className={isAdminRole(user.role) ? "role-admin" : ""}>
+                      {roleLabel(user.role)}
+                    </span>
+                  </div>
+                  <p>
+                    @{user.username} · {user.hasAuthUser ? "Auth OK" : "Sin Auth"}
+                    {!user.isActive ? " · Archivado" : ""}
+                  </p>
+                </div>
+              </article>
+            ))}
+            {!users.length && <EmptyState title="Sin usuarios" />}
+          </div>
+        </section>
+
+        <section className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <p className="eyebrow">Catalogo</p>
+              <h3>Categorias</h3>
+            </div>
+            <span>{categories.length} registros</span>
+          </div>
+          <div className="admin-category-grid">
+            {categories.map((category) => (
+              <article
+                className={`admin-category ${!category.isActive ? "inactive" : ""}`}
+                key={category.id}
+              >
+                <span>{category.codePrefix ?? "SIN"}</span>
+                <strong>{category.name}</strong>
+                <small>{category.isActive ? "Activa" : "Archivada"}</small>
+              </article>
+            ))}
+            {!categories.length && <EmptyState title="Sin categorias" />}
+          </div>
+        </section>
       </div>
-      <div className="stack">
+      <div className="stack admin-actions">
         <FormPanel
           title="Nuevo usuario"
           subtitle="Usa usuario corto; el email interno sera @gpf.local"
@@ -2233,6 +2500,18 @@ function ItemQrCode({
   );
 }
 
+function ItemPhotoThumb({ item }: { item: Item }) {
+  if (item.photoPath) {
+    return <img src={item.photoPath} alt={`Foto ${item.code}`} />;
+  }
+
+  return (
+    <div className="item-photo-placeholder" aria-label={`Sin foto ${item.code}`}>
+      <span>Sin foto</span>
+    </div>
+  );
+}
+
 function ItemPhotoEditor({
   item,
   onUpload,
@@ -2258,9 +2537,12 @@ function ItemPhotoEditor({
           accept="image/*"
           capture="environment"
           onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            if (file) void onUpload(file);
-            event.currentTarget.value = "";
+            const input = event.currentTarget;
+            const file = input.files?.[0];
+            if (!file) return;
+            void onUpload(file).finally(() => {
+              input.value = "";
+            });
           }}
         />
       </label>
@@ -2560,6 +2842,29 @@ function CustomerFields({ customer }: { customer?: Customer }) {
   );
 }
 
+function LocationFields() {
+  return (
+    <>
+      <label>
+        Nombre base
+        <input name="name" required placeholder="Estanteria" />
+      </label>
+      <label>
+        Fila
+        <input name="rowNumber" type="number" min="1" />
+      </label>
+      <label>
+        Columna
+        <input name="columnLetter" maxLength={3} placeholder="A" />
+      </label>
+      <label>
+        Descripcion
+        <textarea name="description" rows={3} />
+      </label>
+    </>
+  );
+}
+
 function ItemSelect({
   items,
   value,
@@ -2625,6 +2930,26 @@ function SectionHeader({
   );
 }
 
+function ArgentinaClock({ compact = false }: { compact?: boolean }) {
+  const [value, setValue] = useState("--/--/---- --:--:--");
+
+  useEffect(() => {
+    const update = () => {
+      setValue(formatArgentinaDateTime(new Date()));
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <span className={`argentina-clock ${compact ? "compact" : ""}`}>
+      ARG {value}
+    </span>
+  );
+}
+
 function FormPanel({
   title,
   subtitle,
@@ -2679,6 +3004,23 @@ function Metric({
   );
 }
 
+function ItemKpi({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "cyan" | "orange" | "red" | "green" | "steel";
+}) {
+  return (
+    <div className={`item-kpi ${tone}`}>
+      <span>{label}</span>
+      <strong>{formatNumber(value)}</strong>
+    </div>
+  );
+}
+
 function DataList<T>({
   rows,
   render,
@@ -2708,7 +3050,18 @@ function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  const modal = (
     <div className="modal-backdrop">
       <div className="modal">
         <header>
@@ -2719,6 +3072,8 @@ function Modal({
       </div>
     </div>
   );
+
+  return mounted ? createPortal(modal, document.body) : null;
 }
 
 function submitForm(
@@ -2748,6 +3103,144 @@ function filterByRole(data: AppData, profile: Profile): AppData {
     customers: data.customers.filter((row) => row.isActive),
     items: data.items.filter((row) => row.isActive),
   };
+}
+
+function itemSearchText(item: Item) {
+  return [
+    item.code,
+    item.name,
+    item.categoryName,
+    item.unitName,
+    item.unitSymbol,
+    item.locationName ?? "sin ubicacion",
+    item.notes ?? "",
+    formatNumber(item.currentStock),
+  ].join(" ");
+}
+
+function itemStockTone(item: Item) {
+  if (item.currentStock < 0) return "red";
+  if (item.minimumStock !== null && item.currentStock <= item.minimumStock) {
+    return "orange";
+  }
+  return "cyan";
+}
+
+function itemStockLabel(item: Item) {
+  if (!item.isActive) return "Archivado";
+  if (item.currentStock < 0) return "Negativo";
+  if (item.minimumStock !== null && item.currentStock <= item.minimumStock) {
+    return "Bajo minimo";
+  }
+  return "OK";
+}
+
+function matchesItemStockFilter(item: Item, filter: ItemStockFilter) {
+  if (filter === "all") return true;
+  if (filter === "negative") return item.currentStock < 0;
+  if (filter === "low") return itemStockTone(item) === "orange";
+  if (filter === "ok") return itemStockTone(item) === "cyan";
+  if (filter === "no-location") return !item.locationId;
+  return true;
+}
+
+function sortItems(items: Item[], sortMode: ItemSort) {
+  return [...items].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    if (sortMode === "name") return a.name.localeCompare(b.name, "es");
+    if (sortMode === "stock-asc") return a.currentStock - b.currentStock;
+    if (sortMode === "stock-desc") return b.currentStock - a.currentStock;
+    return a.code.localeCompare(b.code, "es", { numeric: true });
+  });
+}
+
+function sortAdminUsers(users: AdminUser[]) {
+  return [...users].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    if (isAdminRole(a.role) !== isAdminRole(b.role)) {
+      return isAdminRole(a.role) ? -1 : 1;
+    }
+    return a.username.localeCompare(b.username, "es", { numeric: true });
+  });
+}
+
+function sortCategories(categories: Category[]) {
+  return [...categories].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    return a.name.localeCompare(b.name, "es");
+  });
+}
+
+function isAdminRole(role: Role) {
+  return role === "technical_admin" || role === "admin";
+}
+
+function roleLabel(role: Role) {
+  if (role === "operator") return "Operador";
+  if (role === "technical_admin") return "Admin tecnico";
+  return "Admin";
+}
+
+function initials(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "G";
+  const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
+  return `${first}${second ?? "P"}`.toUpperCase();
+}
+
+async function prepareItemPhotoFile(file: File) {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+
+  try {
+    const image = await loadImageFile(file);
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+
+    if (scale === 1 && file.type === "image/jpeg" && file.size < 1_500_000) {
+      return file;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.82),
+    );
+    if (!blob) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "item-photo";
+    return new File([blob], `${baseName}.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch (error) {
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) {
+      throw new Error(
+        "No se pudo procesar la foto HEIC/HEIF. En el movil usa JPG o 'Mas compatible' y volve a intentar.",
+      );
+    }
+    return file;
+  }
+}
+
+function loadImageFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const source = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(source);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(source);
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+    image.src = source;
+  });
 }
 
 function search<T>(rows: T[], query: string, text: (row: T) => string) {
@@ -2856,6 +3349,10 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 }).format(
     value,
   );
+}
+
+function formatArgentinaDateTime(value: Date) {
+  return argentinaDateTimeFormatter.format(value).replace(",", "");
 }
 
 function currency(value: number) {
