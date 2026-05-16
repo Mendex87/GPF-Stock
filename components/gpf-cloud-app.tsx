@@ -344,6 +344,8 @@ export function GpfCloudApp() {
           </div>
         </header>
 
+        <OpsTicker />
+
         {(notice || error || working) && (
           <div className={`status-line ${error ? "error" : ""}`}>
             {working ?? error ?? notice}
@@ -460,6 +462,27 @@ function ActiveScreen({
   );
 }
 
+function OpsTicker({ compact = false }: { compact?: boolean }) {
+  const items = [
+    "SUPABASE ONLINE",
+    "QR ACTIVO",
+    "STOCK EN TIEMPO REAL",
+    "SALIDAS TRAZABLES",
+    "REPOSICION MONITOREADA",
+    "GPF CLOUD",
+  ];
+
+  return (
+    <div className={`ops-ticker ${compact ? "compact" : ""}`} aria-hidden="true">
+      <div className="ops-ticker-track">
+        {[...items, ...items].map((item, index) => (
+          <span key={`${item}-${index}`}>{item}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MobileShell({
   activeView,
   profile,
@@ -536,6 +559,8 @@ function MobileShell({
           Salir
         </button>
       </div>
+
+      <OpsTicker compact />
 
       {(notice || error || working) && (
         <div className={`status-line ${error ? "error" : ""}`}>
@@ -714,14 +739,21 @@ function Dashboard({
   return (
     <div className="dashboard-grid">
       <div className="hero-panel">
-        <p className="eyebrow">Bienvenido, {profile.displayName}</p>
+        <div>
+          <p className="eyebrow">Bienvenido, {profile.displayName}</p>
+          <div className="system-badges">
+            <span>OPERACION LOCAL</span>
+            <span>QR READY</span>
+            <span>STOCK LIVE</span>
+          </div>
+        </div>
         <h2>
           Operaciones del taller: entradas, salidas, inventario y reposicion.
         </h2>
         <div className="hero-actions">
-          <button onClick={() => setView("exit")}>Registrar salida</button>
-          <button onClick={() => setView("entry")}>Registrar entrada</button>
-          <button onClick={() => setView("inventory")}>
+          <button className="danger" onClick={() => setView("exit")}>Registrar salida</button>
+          <button className="primary" onClick={() => setView("entry")}>Registrar entrada</button>
+          <button className="ghost" onClick={() => setView("inventory")}>
             Inventario fisico
           </button>
         </div>
