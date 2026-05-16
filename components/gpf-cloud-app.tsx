@@ -56,6 +56,9 @@ type View =
 type LayoutMode = "desktop" | "mobile";
 
 type ModuleTone = "cyan" | "green" | "orange" | "red" | "yellow" | "blue";
+type ItemStatusFilter = "all" | "active" | "inactive";
+type ItemStockFilter = "all" | "negative" | "low" | "ok" | "no-location";
+type ItemSort = "code" | "name" | "stock-asc" | "stock-desc";
 
 type AppData = {
   categories: Category[];
@@ -1044,14 +1047,49 @@ function ItemsView({
   runAction: ActionRunner;
 }) {
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ItemStatusFilter>("all");
+  const [stockFilter, setStockFilter] = useState<ItemStockFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [sortMode, setSortMode] = useState<ItemSort>("code");
   const [editing, setEditing] = useState<Item | null>(null);
   const [viewing, setViewing] = useState<Item | null>(null);
   const [page, setPage] = useState(1);
-  const items = search(
-    data.items,
-    query,
-    (item) =>
-      `${item.code} ${item.name} ${item.categoryName} ${item.locationName ?? ""}`,
+  const activeItems = data.items.filter((item) => item.isActive);
+  const lowItems = activeItems.filter((item) => itemStockTone(item) === "orange");
+  const negativeItems = activeItems.filter((item) => itemStockTone(item) === "red");
+  const noLocationItems = activeItems.filter((item) => !item.locationId);
+  const archivedItems = data.items.filter((item) => !item.isActive);
+  const categoryOptions = data.categories.filter((category) => category.isActive);
+  const locationOptions = data.locations.filter((location) => location.isActive);
+  const hasFilters =
+    query.trim() ||
+    statusFilter !== "all" ||
+    stockFilter !== "all" ||
+    categoryFilter !== "all" ||
+    locationFilter !== "all" ||
+    sortMode !== "code";
+  const items = sortItems(
+    search(data.items, query, itemSearchText)
+      .filter((item) =>
+        statusFilter === "all"
+          ? true
+          : statusFilter === "active"
+            ? item.isActive
+            : !item.isActive,
+      )
+      .filter((item) =>
+        categoryFilter === "all" ? true : item.categoryId === Number(categoryFilter),
+      )
+      .filter((item) =>
+        locationFilter === "all"
+          ? true
+          : locationFilter === "none"
+            ? !item.locationId
+            : item.locationId === Number(locationFilter),
+      )
+      .filter((item) => matchesItemStockFilter(item, stockFilter)),
+    sortMode,
   );
   const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -1062,28 +1100,138 @@ function ItemsView({
 
   useEffect(() => {
     setPage(1);
-  }, [query, data.items.length]);
+  }, [
+    query,
+    statusFilter,
+    stockFilter,
+    categoryFilter,
+    locationFilter,
+    sortMode,
+    data.items.length,
+  ]);
 
   return (
     <div className="two-column items-layout">
       <div className="items-panel">
-        <SectionHeader
-          title="Items"
-          subtitle="Catalogo maestro, QR, foto y stock actual"
-        />
-        <div className="items-toolbar">
-          <input
-            className="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por codigo, nombre, categoria o ubicacion"
+        <div className="items-hero">
+          <SectionHeader
+            title="Items"
+            subtitle="Catalogo maestro, QR, foto y stock actual"
           />
-          <span>{items.length} items</span>
+          <div className="items-kpis" aria-label="Resumen de items">
+            <ItemKpi label="Activos" value={activeItems.length} tone="cyan" />
+            <ItemKpi label="Bajo min." value={lowItems.length} tone="orange" />
+            <ItemKpi label="Negativos" value={negativeItems.length} tone="red" />
+            <ItemKpi label="Sin ubic." value={noLocationItems.length} tone="green" />
+            {profile.isAdmin && (
+              <ItemKpi label="Archivados" value={archivedItems.length} tone="steel" />
+            )}
+          </div>
+        </div>
+
+        <div className="items-toolbar">
+          <label className="items-search">
+            Busqueda operativa
+            <input
+              className="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Codigo, nombre, categoria, ubicacion, notas..."
+            />
+          </label>
+          <label>
+            Estado
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as ItemStatusFilter)
+              }
+            >
+              <option value="all">Todos</option>
+              <option value="active">Activos</option>
+              {profile.isAdmin && <option value="inactive">Archivados</option>}
+            </select>
+          </label>
+          <label>
+            Stock
+            <select
+              value={stockFilter}
+              onChange={(event) =>
+                setStockFilter(event.target.value as ItemStockFilter)
+              }
+            >
+              <option value="all">Todos</option>
+              <option value="negative">Negativo</option>
+              <option value="low">Bajo minimo</option>
+              <option value="ok">OK</option>
+              <option value="no-location">Sin ubicacion</option>
+            </select>
+          </label>
+          <label>
+            Categoria
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              {categoryOptions.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Ubicacion
+            <select
+              value={locationFilter}
+              onChange={(event) => setLocationFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              <option value="none">Sin ubicacion</option>
+              {locationOptions.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.displayCode} · {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Orden
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as ItemSort)}
+            >
+              <option value="code">Codigo</option>
+              <option value="name">Nombre</option>
+              <option value="stock-asc">Menor stock</option>
+              <option value="stock-desc">Mayor stock</option>
+            </select>
+          </label>
+          <div className="items-toolbar-actions">
+            <strong>{items.length} resultados</strong>
+            {hasFilters && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setQuery("");
+                  setStatusFilter("all");
+                  setStockFilter("all");
+                  setCategoryFilter("all");
+                  setLocationFilter("all");
+                  setSortMode("code");
+                }}
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
         <div className="item-list">
           {pageItems.map((item) => (
             <article
-              className={`item-card ${!item.isActive ? "inactive" : ""}`}
+              className={`item-card stock-${itemStockTone(item)} ${!item.isActive ? "inactive" : ""}`}
               key={item.id}
               role="button"
               tabIndex={0}
@@ -1095,18 +1243,41 @@ function ItemsView({
                 }
               }}
             >
-              <ItemQrCode item={item} />
+              <div className="item-media">
+                {item.photoPath ? (
+                  <img src={item.photoPath} alt={`Foto ${item.code}`} />
+                ) : (
+                  <ItemQrCode item={item} />
+                )}
+              </div>
               <div className="item-summary">
-                <p className="code">{item.code}</p>
+                <div className="item-summary-top">
+                  <p className="code">{item.code}</p>
+                  <span className={`item-state stock-${itemStockTone(item)}`}>
+                    {itemStockLabel(item)}
+                  </span>
+                </div>
                 <h3>{item.name}</h3>
-                <p>
-                  {item.categoryName} · {item.locationName ?? "Sin ubicacion"}
-                </p>
-                <strong className="item-stock">
+                <div className="item-tags">
+                  <span>{item.categoryName}</span>
+                  <span>{item.locationName ?? "Sin ubicacion"}</span>
+                  {!item.isActive && <span>Archivado</span>}
+                </div>
+                <strong className={`item-stock stock-${itemStockTone(item)}`}>
                   {formatNumber(item.currentStock)} {item.unitSymbol}
                 </strong>
               </div>
               <div className="row-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setViewing(item);
+                  }}
+                >
+                  Ver
+                </button>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -2679,6 +2850,23 @@ function Metric({
   );
 }
 
+function ItemKpi({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "cyan" | "orange" | "red" | "green" | "steel";
+}) {
+  return (
+    <div className={`item-kpi ${tone}`}>
+      <span>{label}</span>
+      <strong>{formatNumber(value)}</strong>
+    </div>
+  );
+}
+
 function DataList<T>({
   rows,
   render,
@@ -2748,6 +2936,54 @@ function filterByRole(data: AppData, profile: Profile): AppData {
     customers: data.customers.filter((row) => row.isActive),
     items: data.items.filter((row) => row.isActive),
   };
+}
+
+function itemSearchText(item: Item) {
+  return [
+    item.code,
+    item.name,
+    item.categoryName,
+    item.unitName,
+    item.unitSymbol,
+    item.locationName ?? "sin ubicacion",
+    item.notes ?? "",
+    formatNumber(item.currentStock),
+  ].join(" ");
+}
+
+function itemStockTone(item: Item) {
+  if (item.currentStock < 0) return "red";
+  if (item.minimumStock !== null && item.currentStock <= item.minimumStock) {
+    return "orange";
+  }
+  return "cyan";
+}
+
+function itemStockLabel(item: Item) {
+  if (!item.isActive) return "Archivado";
+  if (item.currentStock < 0) return "Negativo";
+  if (item.minimumStock !== null && item.currentStock <= item.minimumStock) {
+    return "Bajo minimo";
+  }
+  return "OK";
+}
+
+function matchesItemStockFilter(item: Item, filter: ItemStockFilter) {
+  if (filter === "all") return true;
+  if (filter === "negative") return item.currentStock < 0;
+  if (filter === "low") return itemStockTone(item) === "orange";
+  if (filter === "ok") return itemStockTone(item) === "cyan";
+  if (filter === "no-location") return !item.locationId;
+  return true;
+}
+
+function sortItems(items: Item[], sortMode: ItemSort) {
+  return [...items].sort((a, b) => {
+    if (sortMode === "name") return a.name.localeCompare(b.name, "es");
+    if (sortMode === "stock-asc") return a.currentStock - b.currentStock;
+    if (sortMode === "stock-desc") return b.currentStock - a.currentStock;
+    return a.code.localeCompare(b.code, "es", { numeric: true });
+  });
 }
 
 function search<T>(rows: T[], query: string, text: (row: T) => string) {
